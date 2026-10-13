@@ -23,7 +23,7 @@ SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = "hyeodongjang@gmail.com"
 
 # 키워드 세트 (큰따옴표 포함 정확한 어구 검색)
-KEYWORDS = ['"배터리 소재"', '"배터리 AI"', '"ESS 배터리"']
+KEYWORDS = ["배터리 소재", "배터리 AI", "ESS 배터리"]
 
 
 # ==========================================
