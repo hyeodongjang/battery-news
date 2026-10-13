@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 import email.utils
 import html
 import os
@@ -22,7 +23,7 @@ SENDER_EMAIL = "hyeodongjang@gmail.com"
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = "hyeodongjang@gmail.com"
 
-# 키워드 세트 (큰따옴표 포함 정확한 어구 검색)
+# 키워드 세트
 KEYWORDS = ["배터리 소재", "배터리 AI", "ESS 배터리"]
 
 
@@ -40,19 +41,29 @@ def clean_html(text):
 
 def is_within_last_24h(pub_date_str):
     """기사 작성일이 최근 24시간 이내인지 확인하는 함수"""
+    if not pub_date_str:
+        return True
     try:
         pub_tuple = email.utils.parsedate_tz(pub_date_str)
         if pub_tuple:
             pub_timestamp = email.utils.mktime_tz(pub_tuple)
             pub_datetime = datetime.fromtimestamp(pub_timestamp)
-            return datetime.now() - pub_datetime <= timedelta(hours=24)
+            return datetime.now() - pub_datetime <= timedelta(hours=36)
     except Exception:
         pass
     return True
 
 
+def is_similar(text1, text2, threshold=0.7):
+    """두 텍스트 간의 유사도가 설정 비율(기본 70%) 이상인지 체크하는 함수"""
+    if not text1 or not text2:
+        return False
+    similarity = SequenceMatcher(None, text1, text2).ratio()
+    return similarity >= threshold
+
+
 def get_naver_news(keyword, display=10):
-    """네이버 뉴스 API - 관련도순(sim) 수집 및 최근 24시간 필터링"""
+    """네이버 뉴스 API 수집"""
     url = f"https://openapi.naver.com/v1/search/news.json?query={keyword}&display={display}&sort=sim"
     headers = {
         "X-Naver-Client-Id": NAVER_CLIENT_ID,
@@ -74,14 +85,17 @@ def get_naver_news(keyword, display=10):
                             "description": clean_html(item.get("description", "")),
                         }
                     )
-            return news_list[:3]
+            print(f"✅ 네이버 뉴스 [{keyword}] 수집 완료: {len(news_list)}건")
+            return news_list
+        else:
+            print(f"❌ 네이버 뉴스 API 호출 실패 (상태 코드: {res.status_code}) - {res.text}")
     except Exception as e:
-        print(f"네이버 뉴스 수집 중 오류 발생: {e}")
+        print(f"❌ 네이버 뉴스 수집 중 예외 발생: {e}")
     return []
 
 
 def get_google_news(keyword, display=10):
-    """구글 뉴스 RSS - 주요 뉴스 순 수집 및 최근 24시간 필터링"""
+    """구글 뉴스 RSS 수집"""
     url = f"https://news.google.com/rss/search?q={keyword}&hl=ko&gl=KR&ceid=KR:ko"
 
     try:
@@ -112,14 +126,15 @@ def get_google_news(keyword, display=10):
                             "source": "구글 뉴스",
                             "title": clean_html(title),
                             "link": link,
-                            "description": "구글 뉴스 원문 참고",
+                            "description": clean_html(title),
                         }
                     )
                 if len(news_list) >= display:
                     break
-            return news_list[:3]
+            print(f"✅ 구글 뉴스 [{keyword}] 수집 완료: {len(news_list)}건")
+            return news_list
     except Exception as e:
-        print(f"구글 뉴스 수집 중 오류 발생: {e}")
+        print(f"❌ 구글 뉴스 수집 중 예외 발생: {e}")
     return []
 
 
@@ -144,7 +159,7 @@ def send_email(news_data):
         clean_category = category.replace('"', '')
         html_content += f"<h3 style='color: #2b5797; margin-top: 20px;'>📌 {clean_category} 관련 뉴스</h3>"
         if not articles:
-            html_content += "<p style='color: #777;'>최근 24시간 내 수집된 관련 뉴스가 없습니다.</p>"
+            html_content += "<p style='color: #777;'>최근 수집된 관련 뉴스가 없습니다.</p>"
             continue
 
         html_content += "<ul style='padding-left: 20px;'>"
@@ -191,18 +206,31 @@ def job():
         combined = naver_res + google_res
         seen_links = set()
         unique_news = []
+
         for news in combined:
-            if news["link"] not in seen_links:
+            # 1. URL 중복 체크
+            if news["link"] in seen_links:
+                continue
+
+            # 2. 제목 및 내용(description) 유사도 체크 (70% 기준 적용)
+            is_duplicate = False
+            for existing in unique_news:
+                title_sim = is_similar(news["title"], existing["title"], threshold=0.7)
+                desc_sim = is_similar(news["description"], existing["description"], threshold=0.7)
+
+                if title_sim or desc_sim:
+                    is_duplicate = True
+                    break
+
+            if not is_duplicate:
                 seen_links.add(news["link"])
                 unique_news.append(news)
 
-        all_news[kw] = unique_news
+        # 키워드당 최종 상위 3개 선별
+        all_news[kw] = unique_news[:3]
 
     send_email(all_news)
 
 
-# ==========================================
-# 4. 서버 자동 실행 시작점
-# ==========================================
 if __name__ == "__main__":
     job()
