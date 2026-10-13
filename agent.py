@@ -1,4 +1,5 @@
 import html
+import os  # ★ 맨 위에 os 모듈 추가
 import re
 import smtplib
 import time
@@ -9,19 +10,18 @@ import requests
 import schedule
 
 # ==========================================
-# 1. 설정 정보
+# 1. 설정 정보 (GitHub Secrets에서 가져오기)
 # ==========================================
-NAVER_CLIENT_ID = "qmnVcOwZejEzjOiujj9u"
-NAVER_CLIENT_SECRET = "SK3hqjnmGV"
+NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID")
+NAVER_CLIENT_SECRET = os.environ.get("NAVER_CLIENT_SECRET")
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SENDER_EMAIL = "hyeodongjang@gmail.com"
-SENDER_PASSWORD = "ziva pkvv tvvx cqey"
+SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = "hyeodongjang@gmail.com"
 
 KEYWORDS = ["배터리", "이차전지", "K-배터리"]
-
 
 # ==========================================
 # 2. 크롤링 및 변환 도구 함수
